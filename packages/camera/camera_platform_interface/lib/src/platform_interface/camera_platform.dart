@@ -6,12 +6,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:camera_platform_interface/camera_platform_interface.dart';
-import 'package:camera_platform_interface/src/events/device_event.dart';
 import 'package:camera_platform_interface/src/method_channel/method_channel_camera.dart';
-import 'package:camera_platform_interface/src/types/exposure_mode.dart';
-import 'package:camera_platform_interface/src/types/focus_mode.dart';
-import 'package:camera_platform_interface/src/types/image_format_group.dart';
-import 'package:cross_file/cross_file.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
@@ -39,7 +34,7 @@ abstract class CameraPlatform extends PlatformInterface {
   /// Platform-specific plugins should set this with their own platform-specific
   /// class that extends [CameraPlatform] when they register themselves.
   static set instance(CameraPlatform instance) {
-    PlatformInterface.verifyToken(instance, _token);
+    PlatformInterface.verify(instance, _token);
     _instance = instance;
   }
 

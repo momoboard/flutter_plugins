@@ -13,10 +13,13 @@ import io.flutter.embedding.engine.plugins.activity.ActivityAware;
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.platform.PlatformViewRegistry;
+import io.flutter.plugins.webviewflutter.GeneratedAndroidWebView.CookieManagerHostApi;
 import io.flutter.plugins.webviewflutter.GeneratedAndroidWebView.DownloadListenerHostApi;
+import io.flutter.plugins.webviewflutter.GeneratedAndroidWebView.FlutterAssetManagerHostApi;
 import io.flutter.plugins.webviewflutter.GeneratedAndroidWebView.JavaScriptChannelHostApi;
 import io.flutter.plugins.webviewflutter.GeneratedAndroidWebView.WebChromeClientHostApi;
 import io.flutter.plugins.webviewflutter.GeneratedAndroidWebView.WebSettingsHostApi;
+import io.flutter.plugins.webviewflutter.GeneratedAndroidWebView.WebStorageHostApi;
 import io.flutter.plugins.webviewflutter.GeneratedAndroidWebView.WebViewClientHostApi;
 import io.flutter.plugins.webviewflutter.GeneratedAndroidWebView.WebViewHostApi;
 
@@ -29,7 +32,6 @@ import io.flutter.plugins.webviewflutter.GeneratedAndroidWebView.WebViewHostApi;
  */
 public class WebViewFlutterPlugin implements FlutterPlugin, ActivityAware {
   private FlutterPluginBinding pluginBinding;
-  private FlutterCookieManager flutterCookieManager;
   private WebViewHostApiImpl webViewHostApi;
   private JavaScriptChannelHostApiImpl javaScriptChannelHostApi;
 
@@ -61,16 +63,17 @@ public class WebViewFlutterPlugin implements FlutterPlugin, ActivityAware {
             registrar.messenger(),
             registrar.platformViewRegistry(),
             registrar.activity(),
-            registrar.view());
-    new FlutterCookieManager(registrar.messenger());
+            registrar.view(),
+            new FlutterAssetManager.RegistrarFlutterAssetManager(
+                registrar.context().getAssets(), registrar));
   }
 
   private void setUp(
       BinaryMessenger binaryMessenger,
       PlatformViewRegistry viewRegistry,
       Context context,
-      View containerView) {
-    new FlutterCookieManager(binaryMessenger);
+      View containerView,
+      FlutterAssetManager flutterAssetManager) {
 
     InstanceManager instanceManager = new InstanceManager();
 
@@ -111,6 +114,12 @@ public class WebViewFlutterPlugin implements FlutterPlugin, ActivityAware {
         binaryMessenger,
         new WebSettingsHostApiImpl(
             instanceManager, new WebSettingsHostApiImpl.WebSettingsCreator()));
+    FlutterAssetManagerHostApi.setup(
+        binaryMessenger, new FlutterAssetManagerHostApiImpl(flutterAssetManager));
+    CookieManagerHostApi.setup(binaryMessenger, new CookieManagerHostApiImpl());
+    WebStorageHostApi.setup(
+        binaryMessenger,
+        new WebStorageHostApiImpl(instanceManager, new WebStorageHostApiImpl.WebStorageCreator()));
   }
 
   @Override
@@ -120,18 +129,13 @@ public class WebViewFlutterPlugin implements FlutterPlugin, ActivityAware {
         binding.getBinaryMessenger(),
         binding.getPlatformViewRegistry(),
         binding.getApplicationContext(),
-        null);
+        null,
+        new FlutterAssetManager.PluginBindingFlutterAssetManager(
+            binding.getApplicationContext().getAssets(), binding.getFlutterAssets()));
   }
 
   @Override
-  public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
-    if (flutterCookieManager == null) {
-      return;
-    }
-
-    flutterCookieManager.dispose();
-    flutterCookieManager = null;
-  }
+  public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {}
 
   @Override
   public void onAttachedToActivity(@NonNull ActivityPluginBinding activityPluginBinding) {

@@ -3,9 +3,10 @@
 // found in the LICENSE file.
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
-
+import 'package:webview_flutter_android/webview_android_cookie_manager.dart';
 import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
 
 import 'src/android_webview.dart' as android_webview;
@@ -14,13 +15,17 @@ import 'src/android_webview.dart' as android_webview;
 class WebViewAndroidWidget extends StatefulWidget {
   /// Constructs a [WebViewAndroidWidget].
   const WebViewAndroidWidget({
+    Key? key,
     required this.creationParams,
     required this.useHybridComposition,
     required this.callbacksHandler,
     required this.javascriptChannelRegistry,
     required this.onBuildWidget,
     @visibleForTesting this.webViewProxy = const WebViewProxy(),
-  });
+    @visibleForTesting
+        this.flutterAssetManager = const android_webview.FlutterAssetManager(),
+    @visibleForTesting this.webStorage,
+  }) : super(key: key);
 
   /// Initial parameters used to setup the WebView.
   final CreationParams creationParams;
@@ -47,9 +52,17 @@ class WebViewAndroidWidget extends StatefulWidget {
   /// This should only be changed for testing purposes.
   final WebViewProxy webViewProxy;
 
+  /// Manages access to Flutter assets that are part of the Android App bundle.
+  ///
+  /// This should only be changed for testing purposes.
+  final android_webview.FlutterAssetManager flutterAssetManager;
+
   /// Callback to build a widget once [android_webview.WebView] has been initialized.
   final Widget Function(WebViewAndroidPlatformController controller)
       onBuildWidget;
+
+  /// Manages the JavaScript storage APIs.
+  final android_webview.WebStorage? webStorage;
 
   @override
   State<StatefulWidget> createState() => _WebViewAndroidWidgetState();
@@ -67,6 +80,8 @@ class _WebViewAndroidWidgetState extends State<WebViewAndroidWidget> {
       callbacksHandler: widget.callbacksHandler,
       javascriptChannelRegistry: widget.javascriptChannelRegistry,
       webViewProxy: widget.webViewProxy,
+      flutterAssetManager: widget.flutterAssetManager,
+      webStorage: widget.webStorage,
     );
   }
 
@@ -91,7 +106,11 @@ class WebViewAndroidPlatformController extends WebViewPlatformController {
     required this.callbacksHandler,
     required this.javascriptChannelRegistry,
     @visibleForTesting this.webViewProxy = const WebViewProxy(),
-  })  : assert(creationParams.webSettings?.hasNavigationDelegate != null),
+    @visibleForTesting
+        this.flutterAssetManager = const android_webview.FlutterAssetManager(),
+    @visibleForTesting android_webview.WebStorage? webStorage,
+  })  : webStorage = webStorage ?? android_webview.WebStorage.instance,
+        assert(creationParams.webSettings?.hasNavigationDelegate != null),
         super(callbacksHandler) {
     webView = webViewProxy.createWebView(
       useHybridComposition: useHybridComposition,
@@ -134,6 +153,11 @@ class WebViewAndroidPlatformController extends WebViewPlatformController {
   /// This should only be changed for testing purposes.
   final WebViewProxy webViewProxy;
 
+  /// Manages access to Flutter assets that are part of the Android App bundle.
+  ///
+  /// This should only be changed for testing purposes.
+  final android_webview.FlutterAssetManager flutterAssetManager;
+
   /// Receives callbacks when content should be downloaded instead.
   @visibleForTesting
   late final WebViewAndroidDownloadListener downloadListener =
@@ -144,9 +168,53 @@ class WebViewAndroidPlatformController extends WebViewPlatformController {
   late final WebViewAndroidWebChromeClient webChromeClient =
       WebViewAndroidWebChromeClient();
 
+  /// Manages the JavaScript storage APIs.
+  final android_webview.WebStorage webStorage;
+
   /// Receive various notifications and requests for [android_webview.WebView].
   @visibleForTesting
   WebViewAndroidWebViewClient get webViewClient => _webViewClient;
+
+  @override
+  Future<void> loadHtmlString(String html, {String? baseUrl}) {
+    return webView.loadDataWithBaseUrl(
+      baseUrl: baseUrl,
+      data: html,
+      mimeType: 'text/html',
+    );
+  }
+
+  @override
+  Future<void> loadFile(String absoluteFilePath) {
+    final String url = absoluteFilePath.startsWith('file://')
+        ? absoluteFilePath
+        : 'file://$absoluteFilePath';
+
+    webView.settings.setAllowFileAccess(true);
+    return webView.loadUrl(url, <String, String>{});
+  }
+
+  @override
+  Future<void> loadFlutterAsset(String key) async {
+    final String assetFilePath =
+        await flutterAssetManager.getAssetFilePathByName(key);
+    final List<String> pathElements = assetFilePath.split('/');
+    final String fileName = pathElements.removeLast();
+    final List<String?> paths =
+        await flutterAssetManager.list(pathElements.join('/'));
+
+    if (!paths.contains(fileName)) {
+      throw ArgumentError(
+        'Asset for key "$key" not found.',
+        'key',
+      );
+    }
+
+    return webView.loadUrl(
+      'file:///android_asset/$assetFilePath',
+      <String, String>{},
+    );
+  }
 
   @override
   Future<void> loadUrl(
@@ -154,6 +222,28 @@ class WebViewAndroidPlatformController extends WebViewPlatformController {
     Map<String, String>? headers,
   ) {
     return webView.loadUrl(url, headers ?? <String, String>{});
+  }
+
+  /// When making a POST request, headers are ignored. As a workaround, make
+  /// the request manually and load the response data using [loadHTMLString].
+  @override
+  Future<void> loadRequest(
+    WebViewRequest request,
+  ) async {
+    if (!request.uri.hasScheme) {
+      throw ArgumentError('WebViewRequest#uri is required to have a scheme.');
+    }
+    switch (request.method) {
+      case WebViewRequestMethod.get:
+        return webView.loadUrl(request.uri.toString(), request.headers);
+      case WebViewRequestMethod.post:
+        return webView.postUrl(
+            request.uri.toString(), request.body ?? Uint8List(0));
+      default:
+        throw UnimplementedError(
+          'This version of webview_android_widget currently has no implementation for HTTP method ${request.method.serialize()} in loadRequest.',
+        );
+    }
   }
 
   @override
@@ -175,7 +265,10 @@ class WebViewAndroidPlatformController extends WebViewPlatformController {
   Future<void> reload() => webView.reload();
 
   @override
-  Future<void> clearCache() => webView.clearCache(true);
+  Future<void> clearCache() {
+    webView.clearCache(true);
+    return webStorage.deleteAllData();
+  }
 
   @override
   Future<void> updateSettings(WebSettings setting) async {
@@ -280,7 +373,20 @@ class WebViewAndroidPlatformController extends WebViewPlatformController {
           AutoMediaPlaybackPolicy.always_allow,
     );
 
+    final Color? backgroundColor = creationParams.backgroundColor;
+    if (backgroundColor != null) {
+      webView.setBackgroundColor(backgroundColor);
+    }
+
     addJavascriptChannels(creationParams.javascriptChannelNames);
+
+    // TODO(BeMacized): Remove once platform implementations
+    // are able to register themselves (Flutter >=2.8),
+    // https://github.com/flutter/flutter/issues/94224
+    WebViewCookieManagerPlatform.instance ??= WebViewAndroidCookieManager();
+
+    creationParams.cookies
+        .forEach(WebViewCookieManagerPlatform.instance!.setCookie);
   }
 
   Future<void> _setHasProgressTracking(bool hasProgressTracking) async {
@@ -327,11 +433,12 @@ class WebViewAndroidPlatformController extends WebViewPlatformController {
   }
 
   Future<void> _setUserAgent(WebSetting<String?> userAgent) {
-    if (userAgent.isPresent && userAgent.value != null) {
-      return webView.settings.setUserAgentString(userAgent.value!);
+    if (userAgent.isPresent) {
+      // If the string is empty, the system default value will be used.
+      return webView.settings.setUserAgentString(userAgent.value ?? '');
     }
 
-    return webView.settings.setUserAgentString('');
+    return Future<void>.value();
   }
 
   Future<void> _setZoomEnabled(bool zoomEnabled) {
@@ -615,6 +722,6 @@ class WebViewProxy {
   ///
   /// See [android_webview.WebView].setWebContentsDebuggingEnabled.
   Future<void> setWebContentsDebuggingEnabled(bool enabled) {
-    return android_webview.WebView.setWebContentsDebuggingEnabled(true);
+    return android_webview.WebView.setWebContentsDebuggingEnabled(enabled);
   }
 }

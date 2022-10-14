@@ -6,9 +6,9 @@
 
 A Flutter plugin that manages files and interactions with file dialogs.
 
-|             | macOS  | Web | Windows     |
-|-------------|--------|-----|-------------|
-| **Support** | 10.11+ | Any | Windows 10+ |
+|             | iOS    | Linux | macOS  | Web | Windows     |
+|-------------|--------|-------|--------|-----|-------------|
+| **Support** | iOS 9+ | Any   | 10.11+ | Any | Windows 10+ |
 
 ## Usage
 To use this plugin, add `file_selector` as a [dependency in your pubspec.yaml file](https://flutter.dev/platform-plugins/).
@@ -34,7 +34,7 @@ Please also take a look at our [example][example] app.
 #### Open a single file
 <?code-excerpt "open_image_page.dart (SingleOpen)"?>
 ``` dart
-final XTypeGroup typeGroup = XTypeGroup(
+const XTypeGroup typeGroup = XTypeGroup(
   label: 'images',
   extensions: <String>['jpg', 'png'],
 );
@@ -45,11 +45,11 @@ final XFile? file =
 #### Open multiple files at once
 <?code-excerpt "open_multiple_images_page.dart (MultiOpen)"?>
 ``` dart
-final XTypeGroup jpgsTypeGroup = XTypeGroup(
+const XTypeGroup jpgsTypeGroup = XTypeGroup(
   label: 'JPEGs',
   extensions: <String>['jpg', 'jpeg'],
 );
-final XTypeGroup pngTypeGroup = XTypeGroup(
+const XTypeGroup pngTypeGroup = XTypeGroup(
   label: 'PNGs',
   extensions: <String>['png'],
 );
@@ -83,12 +83,12 @@ Different platforms support different type group filter options. To avoid
 filters that cover all platforms you are targeting, or that you conditionally
 pass different `XTypeGroup`s based on `Platform`.
 
-|                | macOS  | Web | Windows     |
-|----------------|--------|-----|-------------|
-| `extensions`   | ✔️      | ✔️   | ✔️           |
-| `mimeTypes`    | ✔️†     | ✔️   |             |
-| `macUTIs`      | ✔️      |     |             |
-| `webWildCards` |        | ✔️   |             |
+|                | Linux | macOS  | Web | Windows     |
+|----------------|-------|--------|-----|-------------|
+| `extensions`   | ✔️     | ✔️      | ✔️   | ✔️           |
+| `mimeTypes`    | ✔️     | ✔️†     | ✔️   |             |
+| `macUTIs`      |       | ✔️      |     |             |
+| `webWildCards` |       |        | ✔️   |             |
 
 † `mimeTypes` are not supported on version of macOS earlier than 11 (Big Sur).
 

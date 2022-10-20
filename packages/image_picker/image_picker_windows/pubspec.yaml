@@ -22,7 +22,8 @@ dependencies:
     sdk: flutter
   image_picker_platform_interface:
     git:
-      url: https://github.com/dooully/plugins.git
+      url: https://github.com/momoboard/flutter_plugins.git
+      ref: momo
       path: packages/image_picker/image_picker_platform_interface
 
 dev_dependencies:

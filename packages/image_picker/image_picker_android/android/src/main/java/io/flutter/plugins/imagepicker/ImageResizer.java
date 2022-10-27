@@ -19,7 +19,7 @@ import java.util.Set;
 class ImageResizer {
   /** Extensions that the ImageResizer cannot resize. */
   private static final Set<String> nonResizeableExtensions =
-          new HashSet<>(Arrays.asList("gif", "svg", "apng"));
+          new HashSet<>(Arrays.asList("gif", "svg", "apng", "webp"));
 
   private final File externalFilesDirectory;
   private final ExifDataCopier exifDataCopier;
